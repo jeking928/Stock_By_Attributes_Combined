@@ -24,9 +24,11 @@
       $inSBA_query = $db->bindVars($inSBA_query, ':products_id:', $_GET['products_id'], 'integer');
 
       $inSBA = $db->Execute($inSBA_query); // Determine that product is tracked by SBA
+      $prodInSBA = (!$inSBA->EOF && $inSBA->RecordCount() > 0 ? true : false);
      } else { 
        $inSBA = new queryFactoryResult;
        $inSBA->EOF = true;
+       $prodInSBA = false;
      }
 
      if ($zv_display_select_option > 0) {
@@ -34,7 +36,7 @@
        $products_attributes_query = $db->bindVars($products_attributes_query, ':products_id:', $_GET['products_id'], 'integer');
        $products_attributes_query = $db->bindVars($products_attributes_query, ':languages_id:', $_SESSION['languages_id'], 'integer');
        $products_attributes = $db->Execute($products_attributes_query);
-       if ((((defined('PRODINFO_ATTRIBUTE_PLUGIN_MULTI') && ($products_attributes->fields['total'] > 1) && (PRODINFO_ATTRIBUTE_DYNAMIC_STATUS == '1' || PRODINFO_ATTRIBUTE_DYNAMIC_STATUS == '2')) ? file_exists(DIR_WS_CLASSES . 'pad_' . PRODINFO_ATTRIBUTE_PLUGIN_MULTI . '.php') : ((defined('PRODINFO_ATTRIBUTE_PLUGIN_SINGLE') && ($products_attributes->fields['total'] == 1) && (PRODINFO_ATTRIBUTE_DYNAMIC_STATUS == '1' || PRODINFO_ATTRIBUTE_DYNAMIC_STATUS == '3')) ? file_exists(DIR_WS_CLASSES . 'pad_' . PRODINFO_ATTRIBUTE_PLUGIN_SINGLE . '.php') : false )) && /*class_exists('pad_base') && */defined('TABLE_PRODUCTS_WITH_ATTRIBUTES_STOCK') && !$inSBA->EOF)) {
+       if ((((defined('PRODINFO_ATTRIBUTE_PLUGIN_MULTI') && ($products_attributes->fields['total'] > 1) && (PRODINFO_ATTRIBUTE_DYNAMIC_STATUS == '1' || PRODINFO_ATTRIBUTE_DYNAMIC_STATUS == '2')) ? file_exists(DIR_WS_CLASSES . 'pad_' . PRODINFO_ATTRIBUTE_PLUGIN_MULTI . '.php') : ((defined('PRODINFO_ATTRIBUTE_PLUGIN_SINGLE') && ($products_attributes->fields['total'] == 1) && (PRODINFO_ATTRIBUTE_DYNAMIC_STATUS == '1' || PRODINFO_ATTRIBUTE_DYNAMIC_STATUS == '3')) ? file_exists(DIR_WS_CLASSES . 'pad_' . PRODINFO_ATTRIBUTE_PLUGIN_SINGLE . '.php') : false )) && /*class_exists('pad_base') && */defined('TABLE_PRODUCTS_WITH_ATTRIBUTES_STOCK') && $prodInSBA /*!$inSBA->EOF*/)) {
          //$products_attributes = $db->Execute("select count(distinct products_options_id) as total from " . TABLE_PRODUCTS_OPTIONS . " popt, " . TABLE_PRODUCTS_ATTRIBUTES . " patrib where patrib.products_id='" . (int) $_GET['products_id'] . "' and patrib.options_id = popt.products_options_id and popt.language_id = " . (int) $_SESSION['languages_id'] . "");
 
 
@@ -47,6 +49,7 @@
            $pad = new $class($products_id);
 
            echo $pad->draw();
+           $prodInSBA = true;
          } /* END SBA Multi */ elseif ($products_attributes->fields['total'] > 0) {
            $products_id = (preg_match("/^\d{1,10}(\{\d{1,10}\}\d{1,10})*$/", $_GET['products_id']) ? $_GET['products_id'] : (int) $_GET['products_id']);
            require(DIR_WS_CLASSES . 'pad_' . PRODINFO_ATTRIBUTE_PLUGIN_SINGLE . '.php');
@@ -58,6 +61,7 @@
        else {
          $inSBA = new queryFactoryResult;
          $inSBA->EOF = true;
+         $prodInSBA = false;
          ?>
          <h3 id="attribsOptionsText"><?php echo TEXT_PRODUCT_OPTIONS; ?>         </h3>
 <?php } // END NON-SBA SPECIFIC: show please select unless all are readonly ?>
@@ -66,7 +70,7 @@
      } // End display info 
      ?>
      <?php
-     if ($inSBA->EOF && $inSBA->RecordCount() < 1) {
+     if (!$prodInSBA /*$inSBA->EOF && $inSBA->RecordCount() < 1*/) {
        for ($I = 0; $I < sizeof($options_name); $I++) {
          ?>
          <?php
