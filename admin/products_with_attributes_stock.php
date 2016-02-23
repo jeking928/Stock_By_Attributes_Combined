@@ -37,19 +37,20 @@ if (isset($_SESSION['languages_id'])) {
 }
 
 //action
-if (isset($_GET['action']) && $_GET['action']) {
+if (isset($_GET['action']) && zen_not_null($_GET['action'])) {
   $action = addslashes(trim($_GET['action']));
 } else {
   $action = null;
 }
 
 //case selection 'add', 'edit', 'confirm', 'execute', 'delete_all', 'delete', 'resync', 'resync_all', 'auto_sort'
+if (zen_not_null($action)) {
 switch ($action) {
   case 'add':
-    if (isset($_GET['products_id']) and is_numeric((int) $_GET['products_id'])) {
+    if (isset($_GET['products_id']) && is_numeric((int) $_GET['products_id'])) {
       $products_id = (int) $_GET['products_id'];
     }
-    if (isset($_POST['products_id']) and is_numeric((int) $_POST['products_id'])) {
+    if (isset($_POST['products_id']) && is_numeric((int) $_POST['products_id'])) {
       $products_id = (int) $_POST['products_id'];
     }
 
@@ -70,9 +71,10 @@ switch ($action) {
                         pa.products_id, d.products_name
                       FROM ' . TABLE_PRODUCTS_ATTRIBUTES . ' pa
                           left join ' . TABLE_PRODUCTS_DESCRIPTION . ' d on (pa.products_id = d.products_id)
-                      WHERE d.language_id=' . $language_id . ' 
+                      WHERE d.language_id= :language_id: 
                       order by d.products_name';
-
+      $query = $db->bindVars($query, ':language_id:', $language_id, 'integer');
+      
       $products = $db->execute($query);
 
       while (!$products->EOF) {
@@ -87,15 +89,15 @@ switch ($action) {
 
   case 'edit':
     $hidden_form = '';
-    if (isset($_GET['products_id']) and is_numeric((int) $_GET['products_id'])) {
-      $products_id = $_GET['products_id'];
+    if (isset($_GET['products_id']) && is_numeric((int) $_GET['products_id'])) {
+      $products_id = (int)$_GET['products_id'];
     }
 
-    if (isset($_GET['attributes'])) {
+    if (isset($_GET['attributes']) && $_GET['attributes'] != '') {
       $attributes = $_GET['attributes'];
     }
 
-    if (isset($products_id) and isset($attributes)) {
+    if (isset($products_id) && isset($attributes)) {
       $attributes = explode(',', $attributes);
       foreach ($attributes as $attribute_id) {
         $hidden_form .= zen_draw_hidden_field('attributes[]', $attribute_id) . "\n";
@@ -115,7 +117,7 @@ switch ($action) {
         zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . $_POST['products_id'], $request_type));
       }
 
-      $products_id = $_POST['products_id'];
+      $products_id = $db->getBindVarValue($_POST['products_id'], 'integer');
       $product_name = zen_get_products_name($products_id);
 
       $customid = trim($_POST['customid']);
@@ -146,8 +148,10 @@ switch ($action) {
 
       $query = 'select * 
             from ' . TABLE_PRODUCTS_WITH_ATTRIBUTES_STOCK . ' 
-            where products_id = ' . $products_id . ' 
-            and stock_attributes = "' . $stock_attributes . '"';
+            where products_id = :products_id: 
+            and stock_attributes = :stock_attributes:';
+      $query = $db->bindVars($query, ':products_id:', $products_id, 'integer');
+      $query = $db->bindVars($query, ':stock_attributes:', $stock_attributes, 'string');
       $stock_check = $db->Execute($query);
 
       if (!$stock_check->EOF) {
@@ -170,22 +174,22 @@ switch ($action) {
 
     $attributes = $_POST['attributes'];
     if ($_GET['attributes']) {
-      $attributes = $_GET['attributes'];
+      $attributes = $_GET['attributes']; // Why is this overriding the POST version of the same? Shouldn't it be one or the other not both?
     } //s_mack:noconfirm
 
     $products_id = doubleval($_POST['products_id']);
     if ($_GET['products_id']) {
-      $products_id = doubleval($_GET['products_id']);
+      $products_id = doubleval($_GET['products_id']);  // Why is this overriding the POST version of the same? Shouldn't it be one or the other not both?
     } //s_mack:noconfirm
 
-    $customid = addslashes(trim($_POST['customid']));
+    $customid = zen_db_input(trim($_POST['customid']));
     if (isset($_GET['customid']) && $_GET['customid']) {
-      $customid = addslashes(trim($_GET['customid']));
+      $customid = zen_db_input(trim($_GET['customid']));
     } //s_mack:noconfirm
 
-    $skuTitle = addslashes(trim($_POST['skuTitle']));
+    $skuTitle = zen_db_input(trim($_POST['skuTitle']));
     if ($_GET['skuTitle']) {
-      $skuTitle = addslashes(trim($_GET['skuTitle']));
+      $skuTitle = zen_db_input(trim($_GET['skuTitle']));
     }
 
     //$quantity = $_GET['quantity']; //s_mack:noconfirm
@@ -220,8 +224,9 @@ switch ($action) {
         $arrTemp = preg_split("/\,/", $attributes);
         $arrMain = array();
         $intCount = 0;
+        $arrTempCount = sizeof($arrTemp);
 
-        for ($i = 0; $i < sizeof($arrTemp); $i++) {
+        for ($i = 0; $i < $arrTempCount; $i++) {
           //explode array on |
           $arrTemp1 = preg_split("/\|/", $arrTemp[$i]);
           $arrMain[] = $arrTemp1;
@@ -238,16 +243,19 @@ switch ($action) {
         if ($intVars >= 1) {
           $a = 0;
           while ($a <= $intVars) {
+            $arrMainSize = sizeof($arrMain[$a]);
+
             //adds each attribute (no combinations)
-            for ($i = 0; $i < sizeof($arrMain[$a]); $i++) {
+            for ($i = 0; $i < $arrMainSize; $i++) {
               $arrNew[] = array($arrMain[$a][$i]);
             }
             $a++;
           }
+          $arrNewSize = sizeof($arrNew);
 
           //loop through the list of variables / attributes
           //add each one to the database
-          for ($i = 0; $i < sizeof($arrNew); $i++) {
+          for ($i = 0; $i < $arrNewSize; $i++) {
             //used to add multi attribute combinations at one time
             $strAttributes = implode(",", $arrNew[$i]);
             $productAttributeCombo = $products_id . '-' . str_replace(',', '-', $strAttributes);
@@ -259,8 +267,9 @@ switch ($action) {
         $arrTemp = preg_split("/\,/", $attributes);
         $arrMain = array();
         $intCount = 0;
+        $arrTempSize = sizeof($arrTemp);
 
-        for ($i = 0; $i < sizeof($arrTemp); $i++) {
+        for ($i = 0; $i < $arrTempSize; $i++) {
           //explode array on ;
           $arrTemp1 = preg_split("/\;/", $arrTemp[$i]);
           $arrMain[] = $arrTemp1;
@@ -328,10 +337,11 @@ switch ($action) {
           }
 
           } */
+        $arrNewSize = sizeof($arrNew);
 
         //loop through the list of variables / attributes
         //add each one to the database
-        for ($i = 0; $i < sizeof($arrNew); $i++) {
+        for ($i = 0; $i < $arrNewSize; $i++) {
           //used to add multi attribute combinations at one time
           sort($arrNew[$i]); // Ensures that values are in order prior to imploding
           $strAttributes = implode(",", $arrNew[$i]);
@@ -339,16 +349,16 @@ switch ($action) {
           $saveResult = $stock->insertNewAttribQty($products_id, $productAttributeCombo, $strAttributes, $quantity); //can not include the $customid since it must be unique
         }
       } else {
-        //used for adding one attribute or atribute combination at a time
+        //used for adding one attribute or attribute combination at a time
         $strAttributes = ltrim($attributes, ","); //remove extra , if present
         $strAttributes = rtrim($strAttributes, ","); //remove extra , if present
         $productAttributeCombo = $products_id . '-' . str_replace(',', '-', $strAttributes);
         $saveResult = $stock->insertNewAttribQty($products_id, $productAttributeCombo, $strAttributes, $quantity, $customid, $skuTitle);
       }
     } elseif (($_POST['add_edit'] == 'edit') || ($_GET['add_edit'] == 'edit')) { //s_mack:noconfirm
-      $stock_id = $_POST['stock_id']; //s_mack:noconfirm
+      $stock_id = (int)$_POST['stock_id']; //s_mack:noconfirm
       if ($_GET['stock_id']) {
-        $stock_id = $_GET['stock_id'];
+        $stock_id = (int)$_GET['stock_id'];
       } //s_mack:noconfirm
       if (!is_numeric((int) $stock_id)) { //s_mack:noconfirm
         zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, zen_get_all_get_params(array('action')), $request_type));
@@ -388,9 +398,9 @@ switch ($action) {
         //Use the button 'Sync Quantities' when needed, or uncomment the line below if you want it done automatically.
         //$stock->update_parent_products_stock((int)$_POST['products_id']);//keep this line as option, but I think this should not be done automatically.
         $messageStack->add_session(($query_result->fields['rows'] > 1 ? sprintf(PWA_DELETED_VARIANT_ALL, $query_result->fields['rows']) : PWA_DELETED_VARIANT), 'failure');
-        zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . $_POST['products_id'], $request_type));
+        zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . (int)$_POST['products_id'], $request_type));
       } else {
-        zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . $_POST['products_id'], $request_type));
+        zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . (int)$_POST['products_id'], $request_type));
       }
     }
     break;
@@ -399,24 +409,26 @@ switch ($action) {
     if (isset($_POST['confirm'])) {
       // delete item
       if ($_POST['confirm'] == TEXT_YES) {
-        $query = 'delete from ' . TABLE_PRODUCTS_WITH_ATTRIBUTES_STOCK . ' where products_id="' . $_POST['products_id'] . '" and stock_attributes="' . $_POST['attributes'] . '" limit 1';
+        $query = 'delete from ' . TABLE_PRODUCTS_WITH_ATTRIBUTES_STOCK . ' where products_id= :products_id: and stock_attributes=:stock_attributes: limit 1';
+        $query = $db->bindVars($query, ':products_id:', $_POST['products_id'], 'integer');
+        $query = $db->bindVars($query, ':stock_attributes:', $_POST['attributes'], 'string');
         $db->Execute($query);
         //Use the button 'Sync Quantities' when needed, or uncomment the line below if you want it done automatically.
         //$stock->update_parent_products_stock((int)$_POST['products_id']);//keep this line as option, but I think this should not be done automatically.
         $messageStack->add_session(PWA_DELETED_VARIANT, 'failure');
-        zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . $_POST['products_id'], $request_type));
+        zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . (int)$_POST['products_id'], $request_type));
       } else {
-        zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . $_POST['products_id'], $request_type));
+        zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . (int)$_POST['products_id'], $request_type));
       }
     }
     break;
 
   case 'resync':
-    if (is_numeric((int) $_GET['products_id'])) {
+    if (is_numeric((int)$_GET['products_id'])) {
 
       $stock->update_parent_products_stock((int) $_GET['products_id']);
       $messageStack->add_session('Parent Product Quantity Updated', 'success');
-      zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . $_GET['products_id'], $request_type));
+      zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'updateReturnedPID=' . (int)$_GET['products_id'], $request_type));
     } else {
       zen_redirect(zen_href_link(FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, '', $request_type));
     }
@@ -448,8 +460,9 @@ switch ($action) {
              FROM " . TABLE_PRODUCTS_ATTRIBUTES . " pa
              LEFT JOIN " . TABLE_PRODUCTS_OPTIONS_VALUES . " pov on (pov.products_options_values_id = pa.options_values_id)
              LEFT JOIN " . TABLE_PRODUCTS_OPTIONS . " po on (po.products_options_id = pa.options_id) 
-             WHERE pa.products_attributes_id in (" . $sql->fields['stock_attributes'] . ")
+             WHERE pa.products_attributes_id in (:stock_attributes:)
              " . $options_order_by; // ORDER BY po.products_options_sort_order ASC, pov.products_options_values_sort_order ASC;"; // pov.products_options_values_sort_order ASC";
+      $sort_query = $db->bindVars($sort_query, ':stock_attributes', $sql->fields['stock_attributes'], 'noquotestring')
       $sort = $db->Execute($sort_query);
       if ($sort->RecordCount() > 1) {
         $skip_update = true;
@@ -462,7 +475,7 @@ switch ($action) {
       } else {
         $sort_val = $sort->fields['sort'];
         // update sort in db
-        $db->Execute("UPDATE " . TABLE_PRODUCTS_WITH_ATTRIBUTES_STOCK . " set sort = '" . $sort_val . "' WHERE stock_id = '" . $sql->fields['stock_id'] . "' LIMIT 1;");
+        $db->Execute("UPDATE " . TABLE_PRODUCTS_WITH_ATTRIBUTES_STOCK . " set sort = '" . $sort_val . "' WHERE stock_id = '" . (int)$sql->fields['stock_id'] . "' LIMIT 1;");
       }
       $sql->MoveNext();
     }
@@ -510,8 +523,9 @@ switch ($action) {
     // Show a list of the products
     break;
 }
+} // EOF zen_not_null($_GET['action'])
 
-global $template_dir;
+global $template_dir; // Why does this variable need to be made global? Isn't it already in the global space?
 ?>
 <!doctype html>
 <html <?php echo HTML_PARAMS; ?>>
@@ -562,7 +576,8 @@ require(DIR_WS_INCLUDES . 'header.php');
 
           echo zen_draw_form('sba_post_form', FILENAME_PRODUCTS_WITH_ATTRIBUTES_STOCK, 'action=confirm', 'post', '', true) . "\n";
           echo $hidden_form;
-          echo '<p><strong>' . $product_name . '</strong></p>' . "\n";
+          ?><p><strong><?php echo $product_name; ?></strong></p>
+<?php 
 
           foreach ($product_attributes as $option_name => $options) {
 
@@ -590,15 +605,17 @@ require(DIR_WS_INCLUDES . 'header.php');
             array_unshift($options, array('id' => implode(";", $arrValues), 'text' => 'All - Attributes - Combo'));
             array_unshift($options, array('id' => implode("|", $arrValues), 'text' => 'All - Attributes'));
             array_unshift($options, array('id' => null, 'text' => 'N/A'));
-            echo '<p><strong>' . $option_name . ': </strong>';
-            echo zen_draw_pull_down_menu('attributes[]', $options) . '</p>' . "\n";
+            ?><p><strong><?php echo $option_name; ?>: </strong><?php
+            echo zen_draw_pull_down_menu('attributes[]', $options);
+            ?></p>
+<?php
           }
 
-          echo '<p>If using "<strong>All - Attributes - Combo</strong>" there must be TWO (or more) attribute groups selected (i.e., Color and Size).';
-          echo '<hr>';
-
-          echo 'If <strong>"ALL"</strong> is selected, the ' . PWA_SKU_TITLE . ' will not be saved.<br />' . PWA_SKU_TITLE . ' should be unique for each attribute and combination.<br />
-                  <strong>' . PWA_SKU_TITLE . ':</strong> ' . zen_draw_input_field('skuTitle') . '</p>' . "\n";
+          ?><p>If using "<strong>All - Attributes - Combo</strong>" there must be TWO (or more) attribute groups selected (i.e., Color and Size)
+<hr>
+If <strong>"ALL"</strong> is selected, the <?php echo PWA_SKU_TITLE; ?> will not be saved.<br /><?php echo PWA_SKU_TITLE; ?> should be unique for each attribute and combination.<br />
+                  <strong><?php echo PWA_SKU_TITLE; ?>:</strong> <?php echo zen_draw_input_field('skuTitle'); ?></p>
+<?php
           echo '<hr>';
 
           echo 'The ' . PWA_CUSTOM_ID . ' will not be saved if <strong>"ALL"</strong> is selected.<br />' . PWA_CUSTOM_ID . ' must be unique for each attribute / combination.<br />
